@@ -1,0 +1,187 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0b1020">
+<title>TOP1 Auto Token Studio</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;padding:18px;background:#0b1020;color:#f4f7ff;font-family:Arial,sans-serif}
+.card{max-width:520px;margin:18px auto;padding:22px;background:#151d32;border:1px solid #293653;border-radius:18px}
+h1{text-align:center;color:#65e6c1;margin:8px 0}
+.sub{text-align:center;color:#b8c4da;font-size:14px}
+label{display:block;margin-top:14px;color:#cbd5e1;font-size:14px}
+input{width:100%;padding:13px;margin-top:6px;border:1px solid #34445f;border-radius:9px;background:#0b1020;color:#fff;font-size:16px}
+button{width:100%;padding:14px;margin-top:12px;border:0;border-radius:9px;background:#65e6c1;color:#07121a;font-size:15px;font-weight:bold}
+.secondary{background:#293653;color:#fff}
+.warning{background:#3a2b16;color:#ffe0a3}
+#status{white-space:pre-wrap;overflow-wrap:anywhere;margin-top:18px;padding:13px;border-radius:10px;background:#0b1020;border:1px solid #293653;font-size:14px;line-height:1.7}
+.small{color:#9eacc4;font-size:12px;line-height:1.6}
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>TOP1 Studio</h1>
+  <p class="sub">BEP-20 Token Control Panel</p>
+
+  <label>Token Name</label>
+  <input id="tokenName" value="TOP1">
+
+  <label>Token Symbol</label>
+  <input id="tokenSymbol" value="TOP1">
+
+  <label>Total Supply</label>
+  <input id="supply" type="number" min="1" step="1" value="1000000">
+
+  <label>Decimals</label>
+  <input id="decimals" type="number" min="0" max="18" step="1" value="18">
+
+  <button id="connectBtn" type="button">Connect MetaMask</button>
+  <button class="secondary" id="networkBtn" type="button">Check BNB Network</button>
+  <button class="secondary" id="settingsBtn" type="button">Validate Token Settings</button>
+  <button class="secondary" id="contractBtn" type="button">Check Contract File</button>
+  <button class="warning" id="deployBtn" type="button">Deploy Status</button>
+
+  <div id="status" role="status" aria-live="polite">Status: Ready. No transaction has been sent.</div>
+  <p class="small">Safety: This page does not request token deployment or send transactions. Never share your recovery phrase or private key.</p>
+</div>
+
+<script>
+"use strict";
+
+const $ = id => document.getElementById(id);
+const statusBox = $("status");
+const CONTRACT_URL =
+  "https://github.com/kamran135759/TOP1-Auto-Token/blob/main/TOP1.sol";
+let activeAccount = null;
+
+function showStatus(message) {
+  statusBox.textContent = message;
+}
+
+function getProvider() {
+  if (!window.ethereum) {
+    showStatus("MetaMask was not detected.\nOpen this page in MetaMask's browser.");
+    return null;
+  }
+  return window.ethereum;
+}
+
+async function connectWallet() {
+  const provider = getProvider();
+  if (!provider) return;
+
+  try {
+    const accounts = await provider.request({method:"eth_requestAccounts"});
+    activeAccount = accounts && accounts.length ? accounts[0] : null;
+
+    if (!activeAccount) {
+      showStatus("No account selected in MetaMask.");
+      return;
+    }
+
+    const chainId = await provider.request({method:"eth_chainId"});
+    showStatus(
+      "Wallet connected.\nAccount: " + activeAccount +
+      "\nChain ID: " + chainId +
+      (chainId === "0x38" ? "\nNetwork: BNB Smart Chain Mainnet" :
+       "\nWarning: This is not BNB Smart Chain Mainnet.")
+    );
+  } catch (error) {
+    showStatus("Wallet connection failed or was cancelled.\n" +
+      (error && error.message ? error.message : "Unknown error"));
+  }
+}
+
+async function checkNetwork() {
+  const provider = getProvider();
+  if (!provider) return;
+
+  try {
+    const chainId = await provider.request({method:"eth_chainId"});
+    if (chainId === "0x38") {
+      showStatus("Network check passed.\nBNB Smart Chain Mainnet (Chain ID 56).");
+    } else {
+      showStatus("Wrong network.\nCurrent Chain ID: " + chainId +
+        "\nSelect BNB Smart Chain in MetaMask, then check again.");
+    }
+  } catch (error) {
+    showStatus("Network check failed.\n" +
+      (error && error.message ? error.message : "Unknown error"));
+  }
+}
+
+function validateSettings() {
+  const name = $("tokenName").value.trim();
+  const symbol = $("tokenSymbol").value.trim();
+  const supplyText = $("supply").value.trim();
+  const decimalsText = $("decimals").value.trim();
+  const supply = Number(supplyText);
+  const decimals = Number(decimalsText);
+
+  if (!name || !symbol || !/^\d+$/.test(supplyText) ||
+      !Number.isSafeInteger(supply) || supply <= 0 ||
+      !/^\d+$/.test(decimalsText) || !Number.isInteger(decimals) ||
+      decimals < 0 || decimals > 18) {
+    showStatus("Settings invalid.\nEnter a name, symbol, positive whole-number supply, and decimals from 0 to 18.");
+    return false;
+  }
+
+  showStatus(
+    "Settings valid.\nName: " + name +
+    "\nSymbol: " + symbol +
+    "\nSupply: " + supply +
+    "\nDecimals: " + decimals +
+    "\nExpected smallest-unit supply: " + (BigInt(supply) * (10n ** BigInt(decimals))).toString() +
+    "\nThis checks form values only; it does not deploy a token."
+  );
+  return true;
+}
+
+async function checkContractFile() {
+  try {
+    const response = await fetch(CONTRACT_URL, {method:"HEAD", mode:"cors"});
+    if (response.ok) {
+      showStatus("GitHub contract page responded.\n" + CONTRACT_URL +
+        "\nThis does not compile or verify the contract.");
+    } else {
+      showStatus("Could not confirm the contract page through this browser.\nOpen this link manually:\n" + CONTRACT_URL);
+    }
+  } catch (_) {
+    showStatus("The browser could not check GitHub automatically.\nOpen the contract file manually:\n" + CONTRACT_URL);
+  }
+}
+
+function deployStatus() {
+  showStatus(
+    "Deployment is not enabled in this version.\n\n" +
+    "Before deployment, the Solidity source must be compiled and checked. " +
+    "A real deployment needs a wallet transaction and sufficient BNB for network fees.\n\n" +
+    "No transaction was sent and no token was deployed."
+  );
+}
+
+$("connectBtn").addEventListener("click", connectWallet);
+$("networkBtn").addEventListener("click", checkNetwork);
+$("settingsBtn").addEventListener("click", validateSettings);
+$("contractBtn").addEventListener("click", checkContractFile);
+$("deployBtn").addEventListener("click", deployStatus);
+
+if (window.ethereum && typeof window.ethereum.on === "function") {
+  window.ethereum.on("accountsChanged", accounts => {
+    activeAccount = accounts && accounts.length ? accounts[0] : null;
+    showStatus(activeAccount
+      ? "Active account changed:\n" + activeAccount
+      : "Wallet disconnected.");
+  });
+
+  window.ethereum.on("chainChanged", chainId => {
+    showStatus("Network changed.\nChain ID: " + chainId +
+      "\nPress Check BNB Network to confirm.");
+  });
+}
+</script>
+</body>
+</html>
